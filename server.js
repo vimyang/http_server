@@ -94,6 +94,75 @@ app.get('/api/files', async (req, res) => {
   }
 });
 
+// 搜索文件 API
+app.get('/api/search', async (req, res) => {
+  try {
+    const query = req.query.q || '';
+    const searchPath = req.query.path || '';
+
+    if (!query) {
+      return res.json({ results: [] });
+    }
+
+    const currentDir = path.join(STORAGE_DIR, searchPath);
+
+    // 安全检查
+    if (!currentDir.startsWith(STORAGE_DIR)) {
+      return res.status(403).json({ error: '非法访问' });
+    }
+
+    const results = [];
+
+    // 递归搜索函数
+    async function searchDirectory(dir, relativePath = '') {
+      try {
+        const files = await fs.readdir(dir);
+
+        for (const filename of files) {
+          const filePath = path.join(dir, filename);
+          const stats = await fs.stat(filePath);
+          const fileRelativePath = path.join(relativePath, filename);
+
+          // 模糊匹配文件名
+          if (filename.toLowerCase().includes(query.toLowerCase())) {
+            results.push({
+              name: filename,
+              size: stats.size,
+              modified: stats.mtime,
+              isDirectory: stats.isDirectory(),
+              path: stats.isDirectory()
+                ? fileRelativePath
+                : `/download/${encodeURIComponent(fileRelativePath)}`,
+              relativePath: fileRelativePath
+            });
+          }
+
+          // 递归搜索子目录
+          if (stats.isDirectory()) {
+            await searchDirectory(filePath, fileRelativePath);
+          }
+        }
+      } catch (error) {
+        // 忽略无法访问的目录
+      }
+    }
+
+    await searchDirectory(currentDir, searchPath);
+
+    // 按类型和名称排序
+    results.sort((a, b) => {
+      if (a.isDirectory !== b.isDirectory) {
+        return a.isDirectory ? -1 : 1;
+      }
+      return a.name.localeCompare(b.name);
+    });
+
+    res.json({ results, query });
+  } catch (error) {
+    res.status(500).json({ error: '搜索失败' });
+  }
+});
+
 // 文件下载 API
 app.get('/download/:filename(*)', (req, res) => {
   const filename = decodeURIComponent(req.params.filename);
