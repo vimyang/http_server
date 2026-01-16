@@ -312,6 +312,156 @@
       color: white;
     }
 
+    .btn-play {
+      color: #17a2b8;
+      border-color: #17a2b8;
+    }
+
+    .btn-play:hover {
+      background: #17a2b8;
+      color: white;
+    }
+
+    .audio-player {
+      margin-top: 10px;
+      width: 100%;
+      max-width: 300px;
+    }
+
+    .login-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 9999;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .login-modal.active {
+      display: flex;
+    }
+
+    .login-modal-content {
+      background: white;
+      border-radius: 16px;
+      padding: 40px;
+      max-width: 400px;
+      width: 90%;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    .login-header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .login-header h2 {
+      color: #333;
+      font-size: 1.8em;
+      margin-bottom: 10px;
+    }
+
+    .login-header p {
+      color: #6c757d;
+      font-size: 0.9em;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-label {
+      display: block;
+      margin-bottom: 8px;
+      color: #333;
+      font-weight: 600;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 12px 15px;
+      border: 2px solid #dee2e6;
+      border-radius: 8px;
+      font-size: 1em;
+      transition: all 0.3s ease;
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    .btn-login {
+      width: 100%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 1em;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .btn-login:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+    }
+
+    .btn-login:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .main-content {
+      display: none;
+    }
+
+    .main-content.active {
+      display: block;
+    }
+
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: white;
+    }
+
+    .user-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+    }
+
+    .btn-logout {
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 0.9em;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .btn-logout:hover {
+      background: rgba(255, 255, 255, 0.3);
+      border-color: rgba(255, 255, 255, 0.5);
+    }
+
     .empty-state {
       text-align: center;
       padding: 60px 20px;
@@ -516,7 +666,28 @@
   </style>
 </head>
 <body>
-  <div class="container">
+  <!-- 登录模态框 -->
+  <div class="login-modal" id="loginModal">
+    <div class="login-modal-content">
+      <div class="login-header">
+        <h2>🔐 登录文件服务器</h2>
+        <p>请输入用户名和密码访问文件服务器</p>
+      </div>
+      <form id="loginForm" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label class="form-label" for="username">用户名</label>
+          <input type="text" id="username" name="username" class="form-input" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="password">密码</label>
+          <input type="password" id="password" name="password" class="form-input" required>
+        </div>
+        <button type="submit" class="btn-login" id="loginBtn">登录</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="container main-content" id="mainContent">
     <div class="header">
       <div class="header-left">
         <h1>📁 文件服务器</h1>
@@ -537,6 +708,11 @@
         <button class="btn btn-upload" onclick="openUploadModal()">
           ☁️ 上传文件
         </button>
+        <div class="user-info" id="userInfo" style="display: none;">
+          <div class="user-avatar" id="userAvatar">A</div>
+          <span id="username">Admin</span>
+          <button class="btn-logout" onclick="handleLogout()">登出</button>
+        </div>
       </div>
     </div>
 
@@ -599,6 +775,100 @@
     const clearSearchIcon = document.getElementById('clearSearchIcon');
     const searchResultsHeader = document.getElementById('searchResultsHeader');
     const searchResultsInfo = document.getElementById('searchResultsInfo');
+    const loginModal = document.getElementById('loginModal');
+    const mainContent = document.getElementById('mainContent');
+    const loginForm = document.getElementById('loginForm');
+    const loginBtn = document.getElementById('loginBtn');
+    const userInfo = document.getElementById('userInfo');
+    const userAvatar = document.getElementById('userAvatar');
+
+    // 认证功能
+    async function checkAuthStatus() {
+      try {
+        const response = await fetch('/api/auth-status');
+        const data = await response.json();
+        
+        if (data.authenticated) {
+          showMainContent(data.username);
+        } else {
+          showLoginModal();
+        }
+      } catch (error) {
+        showLoginModal();
+      }
+    }
+
+    function showLoginModal() {
+      loginModal.classList.add('active');
+      mainContent.classList.remove('active');
+    }
+
+    function showMainContent(username) {
+      loginModal.classList.remove('active');
+      mainContent.classList.add('active');
+      
+      if (username) {
+        userInfo.style.display = 'flex';
+        userAvatar.textContent = username.charAt(0).toUpperCase();
+        document.getElementById('username').textContent = username;
+      }
+      
+      loadFiles();
+      updateBreadcrumb();
+    }
+
+    async function handleLogin(event) {
+      event.preventDefault();
+      
+      const formData = new FormData(loginForm);
+      const username = formData.get('username');
+      const password = formData.get('password');
+      
+      loginBtn.disabled = true;
+      loginBtn.textContent = '登录中...';
+      
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ username, password }),
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+          showToast('登录成功');
+          showMainContent(username);
+        } else {
+          showToast(data.error || '登录失败', 'error');
+        }
+      } catch (error) {
+        showToast('登录失败，请检查网络连接', 'error');
+      } finally {
+        loginBtn.disabled = false;
+        loginBtn.textContent = '登录';
+      }
+    }
+
+    async function handleLogout() {
+      try {
+        const response = await fetch('/api/logout', {
+          method: 'POST',
+        });
+        
+        if (response.ok) {
+          showToast('已登出');
+          showLoginModal();
+          loginForm.reset();
+        } else {
+          showToast('登出失败', 'error');
+        }
+      } catch (error) {
+        showToast('登出失败', 'error');
+      }
+    }
 
     // 搜索功能
     searchInput.addEventListener('input', (e) => {
@@ -676,6 +946,11 @@
                 </div>
               </div>
               <div class="file-actions">
+                ${isAudioFile(file.name) ? `
+                  <button class="btn-icon btn-play" onclick="toggleAudioPlayer(this, '${escapeHtml(file.path)}')" title="播放">
+                    ▶️
+                  </button>
+                ` : ''}
                 <button class="btn-icon btn-download" onclick="downloadFile('${escapeHtml(file.path)}')" title="下载">
                   ⬇️
                 </button>
@@ -792,14 +1067,19 @@
                     ${formatFileSize(file.size)} • ${formatDate(file.modified)}
                   </div>
                 </div>
-                <div class="file-actions">
-                  <button class="btn-icon btn-download" onclick="downloadFile('${escapeHtml(file.path)}')" title="下载">
-                    ⬇️
-                  </button>
-                  <button class="btn-icon btn-copy" onclick="copyPath('${escapeHtml(file.path)}')" title="复制链接">
-                    📋
-                  </button>
-                </div>
+                  <div class="file-actions">
+                    ${isAudioFile(file.name) ? `
+                      <button class="btn-icon btn-play" onclick="toggleAudioPlayer(this, '${escapeHtml(file.path)}')" title="播放">
+                        ▶️
+                      </button>
+                    ` : ''}
+                    <button class="btn-icon btn-download" onclick="downloadFile('${escapeHtml(file.path)}')" title="下载">
+                      ⬇️
+                    </button>
+                    <button class="btn-icon btn-copy" onclick="copyPath('${escapeHtml(file.path)}')" title="复制链接">
+                      📋
+                    </button>
+                  </div>
               </div>
             `;
           }
@@ -834,6 +1114,7 @@
     async function uploadFile(file) {
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('currentPath', currentPath);
 
       try {
         progressBar.style.display = 'block';
@@ -928,12 +1209,19 @@
         'ppt': '📊', 'pptx': '📊',
         'jpg': '🖼️', 'jpeg': '🖼️', 'png': '🖼️', 'gif': '🖼️', 'svg': '🖼️',
         'mp4': '🎬', 'avi': '🎬', 'mov': '🎬',
-        'mp3': '🎵', 'wav': '🎵',
+        'mp3': '🎵', 'wav': '🎵', 'flac': '🎵', 'aac': '🎵', 'm4a': '🎵',
         'zip': '📦', 'rar': '📦', '7z': '📦',
         'txt': '📃',
         'js': '💻', 'html': '💻', 'css': '💻', 'json': '💻', 'py': '💻'
       };
       return iconMap[ext] || '📄';
+    }
+
+    // 检查是否为音频文件
+    function isAudioFile(filename) {
+      const ext = filename.split('.').pop().toLowerCase();
+      const audioExtensions = ['mp3', 'wav', 'flac', 'aac', 'm4a', 'ogg', 'wma'];
+      return audioExtensions.includes(ext);
     }
 
     function formatFileSize(bytes) {
@@ -974,9 +1262,48 @@
       }, 3000);
     }
 
+    // 音频播放控制
+    function toggleAudioPlayer(button, filePath) {
+      const fileItem = button.closest('.file-item');
+      let audioPlayer = fileItem.querySelector('.audio-player');
+      
+      if (audioPlayer) {
+        if (audioPlayer.paused) {
+          audioPlayer.play();
+          button.innerHTML = '⏸️';
+        } else {
+          audioPlayer.pause();
+          button.innerHTML = '▶️';
+        }
+      } else {
+        audioPlayer = document.createElement('audio');
+        audioPlayer.className = 'audio-player';
+        audioPlayer.controls = true;
+        audioPlayer.src = filePath;
+        
+        audioPlayer.addEventListener('play', () => {
+          button.innerHTML = '⏸️';
+        });
+        
+        audioPlayer.addEventListener('pause', () => {
+          button.innerHTML = '▶️';
+        });
+        
+        audioPlayer.addEventListener('ended', () => {
+          button.innerHTML = '▶️';
+        });
+        
+        fileItem.querySelector('.file-info').appendChild(audioPlayer);
+        audioPlayer.play();
+        button.innerHTML = '⏸️';
+      }
+    }
+
     // 初始加载
-    loadFiles();
-    updateBreadcrumb();
+    checkAuthStatus();
+  </script>
+</body>
+</html>
   </script>
 </body>
 </html>

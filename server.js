@@ -3,9 +3,30 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
 const fsSync = require('fs');
+const session = require('express-session');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// 配置会话
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'file-server-secret-key-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { 
+    secure: false, // 在生产环境中设置为 true（需要 HTTPS）
+    maxAge: 24 * 60 * 60 * 1000 // 24小时
+  }
+}));
+
+// 认证中间件
+function requireAuth(req, res, next) {
+  if (req.session.authenticated) {
+    next();
+  } else {
+    res.status(401).json({ error: '需要登录' });
+  }
+}
 
 // 启动目录（存储文件的目录）
 // 可以通过环境变量 STORAGE_DIR 自定义存储路径
@@ -20,12 +41,23 @@ if (!fsSync.existsSync(STORAGE_DIR)) {
 // 配置 multer 用于文件上传
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, STORAGE_DIR);
+    // 从请求中获取当前路径，默认为空字符串（根目录）
+    const currentPath = req.body.currentPath || '';
+    const targetDir = path.join(STORAGE_DIR, currentPath);
+    
+    // 确保目标目录存在
+    if (!fsSync.existsSync(targetDir)) {
+      fsSync.mkdirSync(targetDir, { recursive: true });
+    }
+    
+    cb(null, targetDir);
   },
   filename: (req, file, cb) => {
     // 保持原始文件名，如果重复则添加时间戳
     const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
-    const filePath = path.join(STORAGE_DIR, originalName);
+    const currentPath = req.body.currentPath || '';
+    const targetDir = path.join(STORAGE_DIR, currentPath);
+    const filePath = path.join(targetDir, originalName);
 
     if (fsSync.existsSync(filePath)) {
       const ext = path.extname(originalName);
@@ -40,11 +72,51 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-// 静态文件服务
+// 解析 JSON 和 URL 编码的请求体
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// 静态文件服务（除了根路径，其他都需要认证）
 app.use(express.static('public'));
 
+// 登录 API
+app.post('/api/login', (req, res) => {
+  const { username, password } = req.body;
+  
+  // 从环境变量获取用户名和密码，或使用默认值
+  const validUsername = process.env.USERNAME || 'admin';
+  const validPassword = process.env.PASSWORD || 'password';
+  
+  if (username === validUsername && password === validPassword) {
+    req.session.authenticated = true;
+    req.session.username = username;
+    res.json({ message: '登录成功', username });
+  } else {
+    res.status(401).json({ error: '用户名或密码错误' });
+  }
+});
+
+// 登出 API
+app.post('/api/logout', (req, res) => {
+  req.session.destroy((err) => {
+    if (err) {
+      return res.status(500).json({ error: '登出失败' });
+    }
+    res.json({ message: '登出成功' });
+  });
+});
+
+// 检查认证状态 API
+app.get('/api/auth-status', (req, res) => {
+  if (req.session.authenticated) {
+    res.json({ authenticated: true, username: req.session.username });
+  } else {
+    res.json({ authenticated: false });
+  }
+});
+
 // 获取文件列表 API
-app.get('/api/files', async (req, res) => {
+app.get('/api/files', requireAuth, async (req, res) => {
   try {
     const subPath = req.query.path || '';
     const currentDir = path.join(STORAGE_DIR, subPath);
@@ -95,7 +167,7 @@ app.get('/api/files', async (req, res) => {
 });
 
 // 搜索文件 API
-app.get('/api/search', async (req, res) => {
+app.get('/api/search', requireAuth, async (req, res) => {
   try {
     const query = req.query.q || '';
     const searchPath = req.query.path || '';
@@ -164,7 +236,7 @@ app.get('/api/search', async (req, res) => {
 });
 
 // 文件下载 API
-app.get('/download/:filename(*)', (req, res) => {
+app.get('/download/:filename(*)', requireAuth, (req, res) => {
   const filename = decodeURIComponent(req.params.filename);
   const filePath = path.join(STORAGE_DIR, filename);
 
@@ -181,16 +253,20 @@ app.get('/download/:filename(*)', (req, res) => {
 });
 
 // 文件上传 API
-app.post('/api/upload', upload.single('file'), (req, res) => {
+app.post('/api/upload', requireAuth, upload.single('file'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: '没有上传文件' });
   }
+
+  // 构建相对路径用于下载链接
+  const currentPath = req.body.currentPath || '';
+  const relativePath = currentPath ? `${currentPath}/${req.file.filename}` : req.file.filename;
 
   res.json({
     message: '文件上传成功',
     filename: req.file.filename,
     size: req.file.size,
-    path: `/download/${encodeURIComponent(req.file.filename)}`
+    path: `/download/${encodeURIComponent(relativePath)}`
   });
 });
 
